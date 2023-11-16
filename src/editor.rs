@@ -112,7 +112,7 @@ impl Editor {
 			Key::Left | Key::Ctrl('b') => if x > 0 {x = x.saturating_sub(1)},
 			Key::Right | Key::Ctrl('f') => if x < width {x = x.saturating_add(1)},
 			Key::Up | Key::Ctrl('p') => if y > 0 {y = y.saturating_sub(1)},
-			Key::Down | Key::Ctrl('n') => if y < height-1 {y = y.saturating_add(1)},
+			Key::Down | Key::Ctrl('n') => if y < height.saturating_sub(1) {y = y.saturating_add(1)},
 			Key::Home => y = 0,
 			Key::End => y = height,
 			_ => (),
