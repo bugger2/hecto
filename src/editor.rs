@@ -169,7 +169,7 @@ impl Editor {
 			println!("Goodbye!\r");
 		} else {
 			self.draw_rows();
-			println!("cursor_y: {}, offset_y: {}", self.cursor_position.y, self.offset.y);
+			// println!("cursor_y: {}, offset_y: {}", self.cursor_position.y, self.offset.y);
 			Terminal::cursor_position(&adjusted_position);
 		}
 		Terminal::show_cursor();
