@@ -112,7 +112,7 @@ impl Editor {
         let empty_row = &Row::from("");
         let mut row = self.document.row(y).unwrap_or(empty_row);
 
-		let width = row.len().saturating_add(((TAB_WIDTH-1)*row.char_count('\t')) as usize);
+		let mut width = row.len().saturating_add(((TAB_WIDTH-1)*row.char_count('\t')) as usize);
 		let height = self.document.len();
 
 		match key {
@@ -122,10 +122,19 @@ impl Editor {
                 if y > 0 { y = y.saturating_sub(1); }
 
                 row = self.document.row(y).unwrap_or(empty_row);
-                if x > row.len() { x = row.len(); }
+                width = row.len().saturating_add(((TAB_WIDTH-1)*row.char_count('\t')) as usize);
+
+                if x > width { x = width; }
             }
-			Key::Down | Key::Ctrl('n') => if y < height {y = y.saturating_add(1)},
-            Key::Ctrl('e') => x = self.document.row(y).unwrap_or(&Row::from("")).len().saturating_sub(1),
+            Key::Down | Key::Ctrl('n') => {
+                if y < height {y = y.saturating_add(1)};
+
+                row = self.document.row(y).unwrap_or(empty_row);
+                width = row.len().saturating_add(((TAB_WIDTH-1)*row.char_count('\t')) as usize);
+
+                if x > width { x = width; }
+            }
+            Key::Ctrl('e') => x = width,
             Key::Ctrl('a') => x = 0,
 			Key::Home => y = 0,
 			Key::End => y = height,
