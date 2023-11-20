@@ -7,6 +7,7 @@ use termion::event::Key;
 use terminal::Terminal;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+const TAB_WIDTH: u32 = 8;
 
 #[derive(Default)]
 pub struct Position {
@@ -73,6 +74,8 @@ impl Editor {
 				| Key::Ctrl('p')
 				| Key::Ctrl('b')
 				| Key::Ctrl('f')
+                | Key::Ctrl('e')
+                | Key::Ctrl('a')
 				| Key::Home
 				| Key::End
 				| Key::PageUp
@@ -98,21 +101,32 @@ impl Editor {
 		if x < offset.x {
 			offset.x = x;
 		} else if x >= offset.x.saturating_add(width) {
-			offset.x = x.saturating_sub(height).saturating_add(1);
+			offset.x = x.saturating_sub(width).saturating_add(1);
 		}
 	}
 
 	fn move_cursor(&mut self, key: Key) {
 		let mut x = self.cursor_position.x;
 		let mut y = self.cursor_position.y;
-		let width = self.terminal.size().width as usize;
+
+        let empty_row = &Row::from("");
+        let mut row = self.document.row(y).unwrap_or(empty_row);
+
+		let width = row.len().saturating_add(((TAB_WIDTH-1)*row.char_count('\t')) as usize);
 		let height = self.document.len();
-		// let height = self.terminal.size().height as usize;
+
 		match key {
 			Key::Left | Key::Ctrl('b') => if x > 0 {x = x.saturating_sub(1)},
 			Key::Right | Key::Ctrl('f') => if x < width {x = x.saturating_add(1)},
-			Key::Up | Key::Ctrl('p') => if y > 0 {y = y.saturating_sub(1)},
-			Key::Down | Key::Ctrl('n') => if y < height.saturating_sub(1) {y = y.saturating_add(1)},
+			Key::Up | Key::Ctrl('p') => {
+                if y > 0 { y = y.saturating_sub(1); }
+
+                row = self.document.row(y).unwrap_or(empty_row);
+                if x > row.len() { x = row.len(); }
+            }
+			Key::Down | Key::Ctrl('n') => if y < height {y = y.saturating_add(1)},
+            Key::Ctrl('e') => x = self.document.row(y).unwrap_or(&Row::from("")).len().saturating_sub(1),
+            Key::Ctrl('a') => x = 0,
 			Key::Home => y = 0,
 			Key::End => y = height,
 			_ => (),
