@@ -4,9 +4,15 @@ use std::fs;
 #[derive(Default)]
 pub struct Document {
 	rows: Vec<Row>,
+    pub filename: Option<String>,
 }
 
 impl Document {
+
+    /// # Errors
+    ///
+    /// If the file cannot be read (permissions denied, file doesn't exist, etc.) then the error
+    /// will be propagated
     pub fn open(filename: &str) -> Result<Self, std::io::Error> {
         let contents = fs::read_to_string(filename)?;
         let mut rows = Vec::new();
@@ -14,19 +20,20 @@ impl Document {
             rows.push(Row::from(value));
         }
         Ok(Self {
-            rows
+            rows,
+            filename: Some(filename.to_string()),
         })
     }
 
-    pub fn row(&self, index: usize) -> Option<&Row> {
+    #[must_use] pub fn row(&self, index: usize) -> Option<&Row> {
         self.rows.get(index)
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use] pub fn is_empty(&self) -> bool {
         self.rows.is_empty()
     }
 
-	pub fn len(&self) -> usize {
+	#[must_use] pub fn len(&self) -> usize {
 		self.rows.len()
 	}
 }
