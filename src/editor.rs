@@ -12,6 +12,7 @@ use terminal::Terminal;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239); // #EFEFEF
 const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63); // #3F3F3F
+pub const TAB_WIDTH: u32 = 4;
 
 #[derive(Default)]
 pub struct Position {
@@ -53,7 +54,7 @@ impl Editor {
         let document = if args.len() > 1 {
             let filename = &args[1];
             let doc = Document::open(filename);
-            if(doc.is_ok()) {
+            if doc.is_ok() {
                 doc.unwrap()
             } else {
                 initial_status = format!("ERROR: Failed to open file {filename}");
@@ -97,24 +98,30 @@ impl Editor {
         let key_pressed = Terminal::read_key()?;
         match key_pressed {
             Key::Ctrl('q') => self.should_quit = true,
-            Key::Left |
-                Key::Right |
-                Key::Up |
-                Key::Down |
-                Key::Ctrl('n' |
-                          'p' |
-                          'b' |
-                          'f' |
-                          'e' |
-                          'a') |
-                Key::Home |
-                Key::End |
-                Key::PageUp |
-                Key::PageDown => self.move_cursor(key_pressed),
+            Key::Char(c) => self.insert_char(c),
+            | Key::Left
+            | Key::Right
+            | Key::Up
+            | Key::Down
+            | Key::Ctrl('n' | 'p' | 'b' | 'f' | 'e' | 'a')
+            | Key::Home
+            | Key::End
+            | Key::PageUp
+            | Key::PageDown => self.move_cursor(key_pressed),
             _ => (),
         }
         self.scroll();
         Ok(())
+    }
+
+    fn insert_char(&mut self, c: char) {
+        self.document.insert(&self.cursor_position, c);
+        let x = &mut self.cursor_position.x;
+        if c != '\t' {
+            *x = x.saturating_add(1);
+        } else {
+            *x = x.saturating_add(TAB_WIDTH as usize);
+        }
     }
 
     fn scroll(&mut self) {
@@ -176,7 +183,7 @@ impl Editor {
             }
 
             Key::Down | Key::Ctrl('n') => {
-                if y < height {y = y.saturating_add(1)};
+                if y < height.saturating_add(1) {y = y.saturating_add(1)};
 
                 row = self.document.row(y).unwrap_or(empty_row);
                 width = row.len();

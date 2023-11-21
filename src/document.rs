@@ -1,4 +1,4 @@
-use crate::row::Row;
+use crate::{row::Row, editor::Position};
 use std::fs;
 
 #[derive(Default)]
@@ -23,6 +23,21 @@ impl Document {
             rows,
             filename: Some(filename.to_string()),
         })
+    }
+
+    pub fn insert(&mut self, at: &Position, c: char) {
+        if at.y == self.len() {
+            let mut row = Row::default();
+            row.push(c);
+            self.rows.push(row);
+        } else {
+            let row: &mut Row = self.rows.get_mut(at.y).unwrap();
+            if at.x == row.len() {
+                row.push(c);
+            } else {
+                row.insert(at.x, c);
+            }
+        }
     }
 
     #[must_use] pub fn row(&self, index: usize) -> Option<&Row> {

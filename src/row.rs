@@ -1,8 +1,8 @@
 use std::cmp;
 use unicode_segmentation::UnicodeSegmentation;
+use crate::editor::TAB_WIDTH;
 
-const TAB_WIDTH: u32 = 4;
-
+#[derive(Default)]
 pub struct Row {
 	string: String,
     len: usize,
@@ -10,11 +10,12 @@ pub struct Row {
 
 impl From<&str> for Row {
     fn from(slice: &str) -> Self {
-        let ret = Row {
+        let mut ret = Row {
             string: String::from(slice),
             len: 0,
         };
-        ret.update_len()
+        ret.update_len();
+        ret
     }
 }
 
@@ -38,6 +39,24 @@ impl Row {
         ret
     }
 
+    pub fn push(&mut self, c: char) {
+        if c != '\t' {
+            self.string.push(c);
+        } else {
+            self.string.push_str(&" ".repeat(TAB_WIDTH as usize));
+        }
+        self.update_len();
+    }
+
+    pub fn insert(&mut self, index: usize, c: char) {
+        if c != '\t' {
+            self.string.insert(index, c);
+        } else {
+            self.string.insert_str(index, &" ".repeat(TAB_WIDTH as usize));
+        }
+        self.update_len();
+    }
+
     #[must_use] pub fn len(&self) -> usize {
         self.len
     }
@@ -56,10 +75,7 @@ impl Row {
         ret
     }
 
-    fn update_len(&self) -> Self {
-        Row {
-            string: self.string.clone(),
-            len: self.string.graphemes(true).count().saturating_add(self.char_count('\t') * (TAB_WIDTH.saturating_sub(1) as usize)),
-        }
+    fn update_len(&mut self) {
+        self.len = self.string.graphemes(true).count().saturating_add(self.char_count('\t') * (TAB_WIDTH.saturating_sub(1) as usize));
     }
 }
