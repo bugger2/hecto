@@ -39,11 +39,22 @@ impl Row {
         ret
     }
 
+    pub fn contents(&self) -> String {
+        self.string.clone()
+    }
+
     pub fn push(&mut self, c: char) {
         if c != '\t' {
             self.string.push(c);
         } else {
             self.string.push_str(&" ".repeat(TAB_WIDTH as usize));
+        }
+        self.update_len();
+    }
+
+    pub fn push_str(&mut self, string: &str) {
+        for c in string.chars() {
+            self.push(c);
         }
         self.update_len();
     }
@@ -56,6 +67,11 @@ impl Row {
         }
         self.update_len();
     }
+
+    pub fn delete(&mut self, index: usize) {
+        self.string.remove(index);
+        self.update_len();
+    } 
 
     #[must_use] pub fn len(&self) -> usize {
         self.len

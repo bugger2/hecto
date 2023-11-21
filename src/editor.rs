@@ -93,12 +93,13 @@ impl Editor {
         }
     }
 
-
     fn process_keypress(&mut self) -> Result<(), std::io::Error> {
         let key_pressed = Terminal::read_key()?;
         match key_pressed {
             Key::Ctrl('q') => self.should_quit = true,
             Key::Char(c) => self.insert_char(c),
+            Key::Backspace => self.del_char_backward(),
+            Key::Delete => self.del_char_forward(),
             | Key::Left
             | Key::Right
             | Key::Up
@@ -122,6 +123,23 @@ impl Editor {
         } else {
             *x = x.saturating_add(TAB_WIDTH as usize);
         }
+    }
+
+    fn del_char_backward(&mut self) {
+        let prev_line_len = self.document.row(self.cursor_position.y.saturating_sub(1)).unwrap_or(&Row::default()).len();
+        self.document.del_char_backward(&self.cursor_position);
+        let x = &mut self.cursor_position.x;
+        let y = &mut self.cursor_position.y;
+        if *x != 0 {
+            *x -= 1;
+        } else if y > &mut 0 {
+            *x = prev_line_len;
+            *y -= 1;
+        }
+    }
+
+    fn del_char_forward(&mut self) {
+        self.document.del_char_forward(&self.cursor_position);
     }
 
     fn scroll(&mut self) {
@@ -193,8 +211,19 @@ impl Editor {
 
             Key::Ctrl('e') => x = width,
             Key::Ctrl('a') => x = 0,
-            Key::Home => y = 0,
-            Key::End => y = height,
+
+            Key::Home => {
+                y = 0;
+                row = self.document.row(y).unwrap_or(empty_row);
+                width = row.len();
+                x = width;
+            }
+
+            Key::End => {
+                y = height.saturating_add(1);
+                x = 0;
+            }
+
             Key::PageUp => y = y.saturating_add(3).saturating_sub(self.terminal.size().height as usize),
 
             Key::PageDown => {
