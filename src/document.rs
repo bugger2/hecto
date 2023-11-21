@@ -75,6 +75,29 @@ impl Document {
         }
     }
 
+    pub fn insert_newline(&mut self, at: &Position) {
+        if at.y >= self.len() {
+            self.rows.push(Row::default());
+            self.rows.push(Row::default());
+        } else if at.x == self.row(at.y).unwrap_or(&Row::default()).len() {
+            self.rows.insert(at.y.saturating_add(1), Row::default());
+        } else {
+            let empty_row_mut = &mut Row::default();
+
+            let curr_row = self.rows.get_mut(at.y).unwrap_or(empty_row_mut);
+            let curr_row_contents = curr_row.contents();
+
+            let split_content = curr_row_contents.split_at(at.x);
+
+            let mut new_row = Row::default();
+
+            new_row.push_str(split_content.1);
+            curr_row.clear_mut().push_str(split_content.0);
+
+            self.rows.insert(at.y.saturating_add(1), new_row);
+        }
+    }
+
     #[must_use] pub fn row(&self, index: usize) -> Option<&Row> {
         self.rows.get(index)
     }

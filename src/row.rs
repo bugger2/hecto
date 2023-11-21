@@ -73,6 +73,18 @@ impl Row {
         self.update_len();
     } 
 
+    pub fn clear(&mut self) -> &Self {
+        self.string.clear();
+        self.update_len();
+        self
+    }
+
+    pub fn clear_mut(&mut self) -> &mut Self {
+        self.string.clear();
+        self.update_len();
+        self
+    }
+
     #[must_use] pub fn len(&self) -> usize {
         self.len
     }

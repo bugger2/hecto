@@ -116,12 +116,21 @@ impl Editor {
     }
 
     fn insert_char(&mut self, c: char) {
-        self.document.insert(&self.cursor_position, c);
-        let x = &mut self.cursor_position.x;
-        if c != '\t' {
-            *x = x.saturating_add(1);
+        if c != '\n' {
+            self.document.insert(&self.cursor_position, c);
         } else {
+            self.document.insert_newline(&self.cursor_position);
+        }
+
+        // handling cursor position
+        let x = &mut self.cursor_position.x;
+        if c == '\t' {
             *x = x.saturating_add(TAB_WIDTH as usize);
+        } else if c == '\n' {
+            self.cursor_position.y += 1;
+            self.cursor_position.x = 0;
+        } else {
+            *x = x.saturating_add(1);
         }
     }
 
