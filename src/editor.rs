@@ -7,7 +7,6 @@ use termion::event::Key;
 use terminal::Terminal;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const TAB_WIDTH: u32 = 8;
 
 #[derive(Default)]
 pub struct Position {
@@ -112,33 +111,52 @@ impl Editor {
         let empty_row = &Row::from("");
         let mut row = self.document.row(y).unwrap_or(empty_row);
 
-		let mut width = row.len().saturating_add(((TAB_WIDTH-1)*row.char_count('\t')) as usize);
+		let mut width = row.len();
 		let height = self.document.len().saturating_sub(1); // -1 to account for the bar
 
 		match key {
-			Key::Left | Key::Ctrl('b') => if x > 0 {x = x.saturating_sub(1)},
-			Key::Right | Key::Ctrl('f') => if x < width {x = x.saturating_add(1)},
+            Key::Left | Key::Ctrl('b') => {
+                if x > 0 { x -= 1; }
+                else if y > 0 { 
+                    y -= 1;
+                    row = self.document.row(y).unwrap_or(empty_row);
+                    width = row.len();
+                    x = width;
+                }
+            }
+
+            Key::Right | Key::Ctrl('f') => {
+                if x < width { x = x.saturating_add(1); }
+                else if y < height { 
+                    y += 1;
+                    x = 0;
+                }
+            }
+
 			Key::Up | Key::Ctrl('p') => {
                 if y > 0 { y = y.saturating_sub(1); }
 
                 row = self.document.row(y).unwrap_or(empty_row);
-                width = row.len().saturating_add(((TAB_WIDTH-1)*row.char_count('\t')) as usize);
+                width = row.len();
 
                 if x > width { x = width; }
             }
+
             Key::Down | Key::Ctrl('n') => {
                 if y < height {y = y.saturating_add(1)};
 
                 row = self.document.row(y).unwrap_or(empty_row);
-                width = row.len().saturating_add(((TAB_WIDTH-1)*row.char_count('\t')) as usize);
+                width = row.len();
 
                 if x > width { x = width; }
             }
+
             Key::Ctrl('e') => x = width,
             Key::Ctrl('a') => x = 0,
 			Key::Home => y = 0,
 			Key::End => y = height,
             Key::PageUp => y = y.saturating_sub(self.terminal.size().height as usize).saturating_add(2),
+
             Key::PageDown => {
                 if y.saturating_add(self.terminal.size().height as usize).saturating_sub(2) < self.document.len() {
                     y = y.saturating_add(self.terminal.size().height as usize).saturating_sub(2);
@@ -146,6 +164,7 @@ impl Editor {
                     y = self.document.len();
                 }
             }
+
 			_ => (),
 		}
 		self.cursor_position = Position { x, y };
