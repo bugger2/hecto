@@ -89,7 +89,7 @@ impl Editor {
 	fn scroll(&mut self) {
 		let Position { x, y } = self.cursor_position;
 		let width = self.terminal.size().width as usize;
-		let height = self.terminal.size().height as usize;
+		let height = (self.terminal.size().height).saturating_sub(1) as usize; // -1 to account for the bar
 		let offset = &mut self.offset;
 
 		if y < offset.y {
@@ -113,7 +113,7 @@ impl Editor {
         let mut row = self.document.row(y).unwrap_or(empty_row);
 
 		let mut width = row.len().saturating_add(((TAB_WIDTH-1)*row.char_count('\t')) as usize);
-		let height = self.document.len();
+		let height = self.document.len().saturating_sub(1); // -1 to account for the bar
 
 		match key {
 			Key::Left | Key::Ctrl('b') => if x > 0 {x = x.saturating_sub(1)},
@@ -138,6 +138,14 @@ impl Editor {
             Key::Ctrl('a') => x = 0,
 			Key::Home => y = 0,
 			Key::End => y = height,
+            Key::PageUp => y = y.saturating_sub(self.terminal.size().height as usize).saturating_add(2),
+            Key::PageDown => {
+                if y.saturating_add(self.terminal.size().height as usize).saturating_sub(2) < self.document.len() {
+                    y = y.saturating_add(self.terminal.size().height as usize).saturating_sub(2);
+                } else {
+                    y = self.document.len();
+                }
+            }
 			_ => (),
 		}
 		self.cursor_position = Position { x, y };
