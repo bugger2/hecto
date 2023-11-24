@@ -49,7 +49,7 @@ pub struct Editor {
 
 impl Editor {
     pub fn default() -> Self {
-        let mut initial_status = String::from("Help: Ctrl-q to exit");
+        let mut initial_status = String::from("Help: Ctrl-s to save | Ctrl-q to exit");
         let args: Vec<String> = env::args().collect();
         let document = if args.len() > 1 {
             let filename = &args[1];
@@ -97,6 +97,17 @@ impl Editor {
         let key_pressed = Terminal::read_key()?;
         match key_pressed {
             Key::Ctrl('q') => self.should_quit = true,
+            Key::Ctrl('s') => {
+                if self.document.filename.is_none() {
+                    self.document.filename = Some(self.prompt("Save as: ")?);
+                }
+
+                if self.document.save().is_ok() {
+                    self.status_message = StatusMessage::from(format!("Successfully saved {}", self.document.filename.clone().unwrap_or(String::from("file"))));
+                } else {
+                    self.status_message = StatusMessage::from("ERROR: Failed to save file!");
+                }
+            }
             Key::Char(c) => self.insert_char(c),
             Key::Backspace => self.del_char_backward(),
             Key::Delete => self.del_char_forward(),
@@ -319,7 +330,27 @@ impl Editor {
         println!("{welcome_message}\r");
     }
 
-    fn refresh_screen(&self) -> Result<(), std::io::Error> {
+    fn prompt(&mut self, prompt: &str) -> Result<String, io::Error> {
+        let mut ret = String::from("");
+        loop {
+            self.status_message = StatusMessage::from(format!("{prompt}{ret}"));
+            self.refresh_screen()?;
+            if let Key::Char(c) = Terminal::read_key()? {
+                if c == '\n' {
+                    self.status_message = StatusMessage::from("");
+                    break;
+                }
+
+                if !c.is_control() {
+                    ret.push(c);
+                    self.cursor_position.x = self.cursor_position.x.saturating_add(1);
+                }
+            }
+        }
+        Ok(ret)
+    }
+
+    fn refresh_screen(&mut self) -> Result<(), std::io::Error> {
         Terminal::hide_cursor();
 
         let adjusted_position = Position {
@@ -331,6 +362,7 @@ impl Editor {
 
         if self.should_quit {
             Terminal::cursor_position(&Position{ x: 0, y: self.terminal.size().height.saturating_sub(1) as usize, });
+            self.status_message = StatusMessage::from("");
             println!("Goodbye!\r");
         } else {
             self.draw_rows();

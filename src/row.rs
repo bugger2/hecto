@@ -85,6 +85,10 @@ impl Row {
         self
     }
 
+    pub fn as_bytes(&self) -> &[u8] {
+        self.string.as_bytes()
+    }
+
     #[must_use] pub fn len(&self) -> usize {
         self.len
     }
