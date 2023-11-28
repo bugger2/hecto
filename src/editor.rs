@@ -3,7 +3,7 @@ use crate::Row;
 use crate::terminal;
 use std::io;
 use std::env;
-use std::time::Duration;
+use core::time::Duration;
 use std::time::Instant;
 use termion::color;
 use termion::event::Key;
@@ -15,6 +15,7 @@ const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63); // #3F3F3F
 pub const TAB_WIDTH: u32 = 4;
 
 #[derive(Default)]
+#[derive(Clone)]
 pub struct Position {
     pub x: usize,
     pub y: usize,
@@ -34,7 +35,7 @@ impl From<String> for StatusMessage {
 }
 impl From<&str> for StatusMessage {
     fn from(message: &str) -> StatusMessage {
-        StatusMessage::from(message.to_string())
+        StatusMessage::from(message.to_owned())
     }
 }
 
@@ -45,6 +46,7 @@ pub struct Editor {
     document: Document,
     offset: Position,
     status_message: StatusMessage,
+    dirty: bool,
 }
 
 impl Editor {
@@ -54,8 +56,8 @@ impl Editor {
         let document = if args.len() > 1 {
             let filename = &args[1];
             let doc = Document::open(filename);
-            if doc.is_ok() {
-                doc.unwrap()
+            if let Ok(document) = doc {
+                document
             } else {
                 initial_status = format!("ERROR: Failed to open file {filename}");
                 Document::default()
@@ -70,6 +72,7 @@ impl Editor {
             document,
             offset: Position::default(),
             status_message: StatusMessage::from(initial_status),
+            dirty: false,
         }
     }
 
@@ -97,36 +100,45 @@ impl Editor {
         let key_pressed = Terminal::read_key()?;
         match key_pressed {
             Key::Ctrl('q') => self.should_quit = true,
-            Key::Ctrl('s') => {
-                if self.document.filename.is_none() {
-                    self.document.filename = Some(self.prompt("Save as: ")?);
-                }
-
-                if self.document.save().is_ok() {
-                    self.status_message = StatusMessage::from(format!("Successfully saved {}", self.document.filename.clone().unwrap_or(String::from("file"))));
-                } else {
-                    self.status_message = StatusMessage::from("ERROR: Failed to save file!");
-                }
-            }
+            Key::Ctrl('s') => self.save(),
             Key::Char(c) => self.insert_char(c),
             Key::Backspace => self.del_char_backward(),
             Key::Delete => self.del_char_forward(),
             | Key::Left
-            | Key::Right
-            | Key::Up
-            | Key::Down
-            | Key::Ctrl('n' | 'p' | 'b' | 'f' | 'e' | 'a')
-            | Key::Home
-            | Key::End
-            | Key::PageUp
-            | Key::PageDown => self.move_cursor(key_pressed),
+                | Key::Right
+                | Key::Up
+                | Key::Down
+                | Key::Ctrl('n' | 'p' | 'b' | 'f' | 'e' | 'a')
+                | Key::Home
+                | Key::End
+                | Key::PageUp
+                | Key::PageDown => self.move_cursor(key_pressed),
             _ => (),
         }
         self.scroll();
         Ok(())
     }
 
+    fn save(&mut self) {
+        if self.document.filename.is_none() {
+            let new_name = self.prompt_string("Save as: ").unwrap_or(None);
+            if new_name.is_none() {
+                self.status_message = StatusMessage::from("Save aborted.");
+                return;
+            }
+            self.document.filename = new_name;
+        }
+
+        if self.document.save().is_ok() {
+            self.status_message = StatusMessage::from(format!("Successfully saved {}", self.document.filename.clone().unwrap_or(String::from("file"))));
+            self.dirty = false;
+        } else {
+            self.status_message = StatusMessage::from("ERROR: Failed to save file!");
+        }
+    }
+
     fn insert_char(&mut self, c: char) {
+        self.dirty = true;
         if c != '\n' {
             self.document.insert(&self.cursor_position, c);
         } else {
@@ -146,6 +158,7 @@ impl Editor {
     }
 
     fn del_char_backward(&mut self) {
+        self.dirty = true;
         let prev_line_len = self.document.row(self.cursor_position.y.saturating_sub(1)).unwrap_or(&Row::default()).len();
         self.document.del_char_backward(&self.cursor_position);
         let x = &mut self.cursor_position.x;
@@ -159,6 +172,7 @@ impl Editor {
     }
 
     fn del_char_forward(&mut self) {
+        self.dirty = true;
         self.document.del_char_forward(&self.cursor_position);
     }
 
@@ -190,7 +204,7 @@ impl Editor {
 
         let mut width = row.len();
         let height = self.document.len().saturating_sub(1); // -1 to account for y being 0 based
-                                                            // and len being 1 based
+        // and len being 1 based
 
         match key {
             Key::Left | Key::Ctrl('b') => {
@@ -276,7 +290,7 @@ impl Editor {
             filename = file.clone();
             filename.truncate(20);
         }
-        status = format!("{} - {}", filename, self.document.len());
+        status = format!("{}{} - {}", self.document.is_dirty().then_some("* ").unwrap_or("  ") , filename, self.document.len());
         let line_indicator = format!("{}/{}", self.cursor_position.y.saturating_add(1), self.document.len());
         let len = status.len() + line_indicator.len();
 
@@ -284,7 +298,7 @@ impl Editor {
             status.push_str(&" ".repeat(width-len));
         }
         status.push_str(&line_indicator);
-        status.truncate(width as usize);
+        status.truncate(width);
 
         Terminal::set_bg_color(STATUS_BG_COLOR);
         Terminal::set_fg_color(STATUS_FG_COLOR);
@@ -330,40 +344,106 @@ impl Editor {
         println!("{welcome_message}\r");
     }
 
-    fn prompt(&mut self, prompt: &str) -> Result<String, io::Error> {
-        let mut ret = String::from("");
+    fn prompt_string(&mut self, prompt: &str) -> Result<Option<String>, io::Error> {
+        let mut ret = String::new();
+        let prev_cursor_position = self.cursor_position.clone();
+        self.cursor_position.y = self.terminal.size().height.saturating_sub(1) as usize;
+        self.cursor_position.x = prompt.len();
+
         loop {
             self.status_message = StatusMessage::from(format!("{prompt}{ret}"));
-            self.refresh_screen()?;
-            if let Key::Char(c) = Terminal::read_key()? {
-                if c == '\n' {
-                    self.status_message = StatusMessage::from("");
-                    break;
-                }
+            self.refresh_screen_prompt()?;
 
-                if !c.is_control() {
+            match Terminal::read_key()? {
+                Key::Char('\n') => break,
+                Key::Char(c) => {
                     ret.push(c);
                     self.cursor_position.x = self.cursor_position.x.saturating_add(1);
-                }
+                },
+                Key::Backspace => {
+                    let c = ret.pop();
+                    if c.is_some() {
+                        self.cursor_position.x = self.cursor_position.x.saturating_sub(1);
+                    }
+                },
+                Key::Esc | Key::Ctrl('g') => {
+                        ret.clear();
+                        break;
+                    }
+                _ => (),
             }
         }
-        Ok(ret)
+        self.cursor_position = prev_cursor_position;
+
+        self.status_message = StatusMessage::from("");
+        
+        if ret.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(ret))
+        }
     }
 
-    fn refresh_screen(&mut self) -> Result<(), std::io::Error> {
+    fn prompt_bool(&mut self, prompt: &str) -> Result<bool, io::Error> {
+		let ret: bool;
+        let prev_cursor_position = self.cursor_position.clone();
+        self.cursor_position.y = self.terminal.size().height.saturating_sub(1) as usize;
+
+        loop {
+            self.status_message = StatusMessage::from(format!("{prompt} y or n: "));
+            self.cursor_position.x = prompt.len().saturating_add(" y or n: ".len());
+			self.refresh_screen_prompt()?;
+
+            match Terminal::read_key()? {
+                Key::Char('y') => {
+					ret = true;
+					break;
+				},
+                Key::Char('n') => {
+					ret = false;
+					break;
+				},
+                Key::Esc | Key::Ctrl('g') => {
+					ret = false;
+					break;
+				},
+				_ => (),
+            }
+        }
+
+        self.cursor_position = prev_cursor_position;
+        self.status_message = StatusMessage::from("");
+		self.refresh_screen_prompt()?;
+        
+		Ok(ret)
+    }
+
+    fn refresh_screen(&mut self) -> Result<(), io::Error> {
         Terminal::hide_cursor();
 
         let adjusted_position = Position {
-            x: self.cursor_position.x - self.offset.x,
-            y: self.cursor_position.y - self.offset.y,
+            x: self.cursor_position.x.saturating_sub(self.offset.x),
+            y: self.cursor_position.y.saturating_sub(self.offset.y),
         };
 
         Terminal::cursor_position(&adjusted_position);
 
         if self.should_quit {
-            Terminal::cursor_position(&Position{ x: 0, y: self.terminal.size().height.saturating_sub(1) as usize, });
-            self.status_message = StatusMessage::from("");
-            println!("Goodbye!\r");
+			if self.dirty {
+				if self.prompt_bool("Unsaved changes remaining. Really Quit?").unwrap() {
+					Terminal::cursor_position(&Position{ x: 0, y: self.terminal.size().height.saturating_sub(1) as usize, });
+					self.status_message = StatusMessage::from("");
+					Terminal::clear_current_line();
+					println!("Goodbye!\r");
+				} else {
+					self.should_quit = false;
+				}
+			} else {
+				Terminal::cursor_position(&Position{ x: 0, y: self.terminal.size().height.saturating_sub(1) as usize, });
+				self.status_message = StatusMessage::from("");
+				Terminal::clear_current_line();
+				println!("Goodbye!\r");
+			}
         } else {
             self.draw_rows();
             self.draw_status_bar();
@@ -374,6 +454,25 @@ impl Editor {
         Terminal::show_cursor();
         Terminal::flush()
     }
+
+	fn refresh_screen_prompt(&mut self) -> Result<(), io::Error> {
+        Terminal::hide_cursor();
+
+        let adjusted_position = Position {
+            x: self.cursor_position.x.saturating_sub(self.offset.x),
+            y: self.cursor_position.y.saturating_sub(self.offset.y),
+        };
+
+        Terminal::cursor_position(&adjusted_position);
+
+		self.draw_rows();
+		self.draw_status_bar();
+		self.draw_message_bar();
+        // println!("cursor_y: {}, offset_y: {}", self.cursor_position.y, self.offset.y);
+        Terminal::cursor_position(&adjusted_position);
+        Terminal::show_cursor();
+        Terminal::flush()
+	}
 }
 
 

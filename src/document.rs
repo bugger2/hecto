@@ -6,6 +6,7 @@ use std::fs;
 pub struct Document {
 	rows: Vec<Row>,
     pub filename: Option<String>,
+	dirty: bool,
 }
 
 impl Document {
@@ -23,10 +24,11 @@ impl Document {
         Ok(Self {
             rows,
             filename: Some(filename.to_string()),
+			dirty: false,
         })
     }
 
-    pub fn save(&self) -> Result<(), Error> {
+    pub fn save(&mut self) -> Result<(), Error> {
         if let Some(filename) = &self.filename {
             let mut file = fs::File::create(filename)?;
             for row in &self.rows {
@@ -34,6 +36,7 @@ impl Document {
                 file.write_all(b"\n")?;
             }
         }
+		self.dirty = false;
         Ok(())
     }
 
@@ -50,6 +53,7 @@ impl Document {
                 row.insert(at.x, c);
             }
         }
+		self.dirty = true;
     }
 
     pub fn del_char_backward(&mut self, at: &Position) {
@@ -67,6 +71,7 @@ impl Document {
                 self.rows.remove(at.y);
             }
         }
+		self.dirty = true;
     }
 
     pub fn del_char_forward(&mut self, at: &Position) {
@@ -85,6 +90,7 @@ impl Document {
                 self.rows.remove(at.y.saturating_add(1));
             }
         }
+		self.dirty = true;
     }
 
     pub fn insert_newline(&mut self, at: &Position) {
@@ -108,6 +114,7 @@ impl Document {
 
             self.rows.insert(at.y.saturating_add(1), new_row);
         }
+		self.dirty = true;
     }
 
     #[must_use] pub fn row(&self, index: usize) -> Option<&Row> {
@@ -120,5 +127,9 @@ impl Document {
 
 	#[must_use] pub fn len(&self) -> usize {
 		self.rows.len()
+	}
+
+	#[must_use] pub fn is_dirty(&self) -> bool {
+		self.dirty
 	}
 }
