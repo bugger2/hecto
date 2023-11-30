@@ -1,3 +1,5 @@
+// hello from hecto
+
 use crate::Document;
 use crate::Row;
 use crate::terminal;
@@ -14,8 +16,7 @@ const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239); // #EFEFEF
 const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63); // #3F3F3F
 pub const TAB_WIDTH: u32 = 4;
 
-#[derive(Default)]
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct Position {
     pub x: usize,
     pub y: usize,
@@ -51,7 +52,7 @@ pub struct Editor {
 
 impl Editor {
     pub fn default() -> Self {
-        let mut initial_status = String::from("Help: Ctrl-s to save | Ctrl-q to exit");
+        let mut initial_status = String::from("Help: Ctrl-s to search | Ctrl-w to save | Ctrl-q to exit");
         let args: Vec<String> = env::args().collect();
         let document = if args.len() > 1 {
             let filename = &args[1];
@@ -65,6 +66,7 @@ impl Editor {
         } else {
             Document::default()
         };
+
         Self {
             should_quit: false,
             terminal: Terminal::new().expect("Failed to initialize terminal"),
@@ -100,7 +102,10 @@ impl Editor {
         let key_pressed = Terminal::read_key()?;
         match key_pressed {
             Key::Ctrl('q') => self.should_quit = true,
-            Key::Ctrl('s') => self.save(),
+            Key::Ctrl('w') => self.save()
+                .unwrap_or_else(|_| println!("ERROR: Failed to save {filename}",
+                                             filename = self.document.filename.clone().unwrap_or(String::from("file")))),
+            Key::Ctrl('s') => self.find()?,
             Key::Char(c) => self.insert_char(c),
             Key::Backspace => self.del_char_backward(),
             Key::Delete => self.del_char_forward(),
@@ -119,22 +124,41 @@ impl Editor {
         Ok(())
     }
 
-    fn save(&mut self) {
+    fn save(&mut self) -> Result<(), io::Error> {
         if self.document.filename.is_none() {
-            let new_name = self.prompt_string("Save as: ").unwrap_or(None);
+            let new_name = self.prompt_string("Save as: ", |_, _, _| {})?;
             if new_name.is_none() {
                 self.status_message = StatusMessage::from("Save aborted.");
-                return;
+                return Ok(());
             }
             self.document.filename = new_name;
         }
 
-        if self.document.save().is_ok() {
-            self.status_message = StatusMessage::from(format!("Successfully saved {}", self.document.filename.clone().unwrap_or(String::from("file"))));
-            self.dirty = false;
+        self.document.save()?;
+        self.status_message = StatusMessage::from(format!("Successfully saved {}", self.document.filename.clone().unwrap_or(String::from("file"))));
+        self.dirty = false;
+        Ok(())
+    }
+
+    fn find(&mut self) -> Result<(), io::Error> {
+        let initial_position = self.cursor_position.clone();
+
+        if let Some(query) = self.prompt_string("Search: ", |editor, _, query| {
+            if let Some(position) = editor.document.find(query) {
+                editor.cursor_position = position;
+                editor.scroll();
+            }})?
+        {
+            if let Some(position) = self.document.find(&query) {
+                self.cursor_position = position;
+            } else {
+                self.status_message = StatusMessage::from(format!("Not found: {query}"));
+            }
         } else {
-            self.status_message = StatusMessage::from("ERROR: Failed to save file!");
+            self.cursor_position = initial_position;
+            self.scroll();
         }
+        Ok(())
     }
 
     fn insert_char(&mut self, c: char) {
@@ -344,7 +368,10 @@ impl Editor {
         println!("{welcome_message}\r");
     }
 
-    fn prompt_string(&mut self, prompt: &str) -> Result<Option<String>, io::Error> {
+    fn prompt_string<C>(&mut self, prompt: &str, callback: C) -> Result<Option<String>, io::Error> 
+    where
+        C: Fn(&mut Self, Key, &String)
+    {
         let mut ret = String::new();
         let prev_cursor_position = self.cursor_position.clone();
         self.cursor_position.y = self.terminal.size().height.saturating_sub(1) as usize;
@@ -354,7 +381,8 @@ impl Editor {
             self.status_message = StatusMessage::from(format!("{prompt}{ret}"));
             self.refresh_screen_prompt()?;
 
-            match Terminal::read_key()? {
+            let key = Terminal::read_key()?;
+            match key {
                 Key::Char('\n') => break,
                 Key::Char(c) => {
                     ret.push(c);
@@ -372,6 +400,7 @@ impl Editor {
                     }
                 _ => (),
             }
+            callback(self, key, &ret);
         }
         self.cursor_position = prev_cursor_position;
 

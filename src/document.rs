@@ -18,9 +18,7 @@ impl Document {
     pub fn open(filename: &str) -> Result<Self, std::io::Error> {
         let contents = fs::read_to_string(filename)?;
         let mut rows = Vec::new();
-        for value in contents.lines() {
-            rows.push(Row::from(value));
-        }
+        contents.lines().for_each(|line| rows.push(Row::from(line)));
         Ok(Self {
             rows,
             filename: Some(filename.to_string()),
@@ -115,6 +113,15 @@ impl Document {
             self.rows.insert(at.y.saturating_add(1), new_row);
         }
 		self.dirty = true;
+    }
+
+    pub fn find(&self, query: &str) -> Option<Position> {
+        for (y, row) in self.rows.iter().enumerate() {
+            if let Some(x) = row.find(query) {
+                return Some(Position{ x, y });
+            }
+        }
+        None
     }
 
     #[must_use] pub fn row(&self, index: usize) -> Option<&Row> {

@@ -89,6 +89,17 @@ impl Row {
         self.string.as_bytes()
     }
 
+    pub fn find(&self, query: &str) -> Option<usize> {
+        if let Some(index) = self.string.find(query) {
+            for (grapheme_index, (byte_index, _)) in self.string[..].grapheme_indices(true).enumerate() {
+                if byte_index == index {
+                    return Some(grapheme_index);
+                }
+            }
+        }
+        None
+    }
+
     #[must_use] pub fn len(&self) -> usize {
         self.len
     }
